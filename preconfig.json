@@ -1,0 +1,48 @@
+{
+    "_about": "Defaults copied into data/settings/configs/config.json on first run. Setup then only asks for what's missing here (always the token). Set a value to null to be asked for it in setup instead. Tokens are never read from this file. After the first run, edit config.json or use Settings in the dashboard.",
+
+    "dashboard_port": 6767,
+    "dashboard_open_browser": true,
+
+    "prefix": ".",
+    "delete_timer": 10,
+    "embed_mode": "web",
+    "device": "desktop",
+
+    "rpc": false,
+    "afkmode": false,
+    "afkmsg": "I'm AFK right now, I'll get back to you soon.",
+
+    "nitro_sniper": false,
+    "nitro_sniper_redeemer": "",
+    "nitro_blacklist_ids": [],
+    "giveaway_sniper": false,
+    "giveaway_delay": 10,
+    "giveaway_bot_ids": [],
+    "giveaway_blacklist_ids": [],
+
+    "pinglogger": false,
+    "dmlogger": false,
+    "sessionlogger": false,
+    "relationshiplogger": false,
+    "webhooknotifs": false,
+
+    "dmlogger_webhook_url": "",
+    "error_webhook_url": "",
+    "nitro_webhook_url": "",
+    "giveaway_webhook_url": "",
+    "pinglogger_webhook_url": "",
+    "relationship_webhook_url": "",
+
+    "music_whitelist": [],
+    "music_volume": 100,
+    "music_autoplay": false,
+    "music_local": false,
+
+    "selfthrottle": true,
+    "autovcleave": false,
+    "autobackup": false,
+
+    "etheme": "",
+    "theme": ""
+}

@@ -651,7 +651,7 @@ def run_web_gui_server():
     flask_cli.show_server_banner = lambda *args, **kwargs: None
 
     app = Flask(__name__)
-    port = 8080
+    port = DASHBOARD_PORT
     print(f"[INFO] assets exists: {assets_dir.exists()}")
     api = API()
     app.before_request(lambda: reject_foreign_request(request))
@@ -712,7 +712,7 @@ def run_web_gui_server():
 
     print(f"[INFO] starting server on http://localhost:{port}")
     time.sleep(1)
-    webbrowser.open(f"http://localhost:{port}")
+    open_dashboard()
     app.run(host='localhost', port=port, debug=False, use_reloader=False, threaded=True)
 
 def runbot():

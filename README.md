@@ -13,7 +13,7 @@ Wraith: retired developer of cheddlatron
 - **500+ commands** across `account`, `utility`, `fun`, `meme`, `moderation`, `ai`, `hacking`, `codeblock`, `raid`, `dumping`, `spotify`, and `music`
 - **YouTube music playback** - `mplay`, `mskip`, `mstop`, `mqueue`, `mnowplaying`, `mloop`, `mautoplay`, `mvolume` stream real audio into a voice channel via [ytqueue](https://github.com/KeiraOMG0/ytqueue), with automatic cookie refresh via the [musicbot-cookie-sync](https://github.com/KeiraOMG0/musicbot-cookie-sync) Chrome extension
 - **Music whitelist** - run repent on an alt and let your main (or friends) use the music commands, see [Music on an alt](#music-on-an-alt)
-- **Dashboard** - opens in your browser at `http://localhost:8080`:
+- **Dashboard** - opens in your browser at `http://localhost:6767`:
   - **Overview** - profile, session stats (uptime, latency, commands loaded), now playing, quick toggles and the latest console lines on one screen
   - **Console** - the full live console
   - **Rich Presence** - standard, console and Spotify presences with a live preview; changes apply instantly, no restart needed
@@ -27,12 +27,34 @@ Wraith: retired developer of cheddlatron
 
 ## Getting started
 
-1. Install Python 3.10+ and run `pip install -r req.txt`
-2. Run `python repent.py`
-3. The first time, a setup page opens in your browser. Paste your token and go through the steps; everything except the token can be skipped and changed later in **Settings**
-4. When setup finishes, the dashboard opens at `http://localhost:8080` and shows each startup step while it connects
+1. Install Python 3.10+, then create a virtual environment and install the requirements:
+   ```
+   python -m venv .venv
+   .venv\Scripts\activate        # macOS/Linux: source .venv/bin/activate
+   pip install -r req.txt
+   ```
+2. (Optional) Edit `preconfig.json` to pick your defaults before the first run, see [Preconfig](#preconfig)
+3. Run `python repent.py`
+4. The first time, a setup page opens in your browser and asks for your token. Anything `preconfig.json` doesn't set is asked there too
+5. When setup finishes, the dashboard opens at `http://localhost:6767` and shows each startup step while it connects
 
 When an update adds new settings, setup opens once more on the next start and only asks for the new ones.
+
+## Preconfig
+
+`preconfig.json` holds the default for every setting. On the first run (when `data/settings/configs/config.json` doesn't exist yet) repent copies it into `config.json`, so setup only has to ask for your token.
+
+- Values get the same checks as the setup page. If one is invalid, repent prints a warning and asks for it during setup
+- Set a value to `null` to be asked for it during setup instead
+- Tokens are never read from `preconfig.json`, since it's tracked by git. Setup always asks for them
+- After the first run, `preconfig.json` is no longer read. Change settings in the dashboard or in `config.json`
+
+Dashboard options (set them in `preconfig.json` before the first run, or in `config.json` after):
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `dashboard_port` | `6767` | Port for the setup page and dashboard. If another program is using it, repent stops and tells you to pick a different one |
+| `dashboard_open_browser` | `true` | Set to `false` to print the dashboard URL instead of opening your browser |
 
 ## Requirements
 

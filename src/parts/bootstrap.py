@@ -397,7 +397,31 @@ def filesafe(filename):
     filename = filename.rstrip('. ')
     return filename
 
-LOCAL_HOSTS = {"localhost:8080", "127.0.0.1:8080"}
+DEFAULT_DASHBOARD_PORT = 6767
+
+def load_dashboard_port():
+    try:
+        port = int(config_get('dashboard_port') or DEFAULT_DASHBOARD_PORT)
+    except (TypeError, ValueError):
+        port = 0
+    if not 1 <= port <= 65535:
+        print(f"[WARNING] dashboard_port in config.json isn't a valid port, using {DEFAULT_DASHBOARD_PORT}")
+        return DEFAULT_DASHBOARD_PORT
+    return port
+
+def ensure_dashboard_port_free(port):
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        in_use = s.connect_ex(('127.0.0.1', port)) == 0
+    if in_use:
+        print(f"[ERROR] port {port} is already in use by another program. Set dashboard_port in {CONFIG_FILE.relative_to(PROJECT_ROOT)} to a free port and restart.")
+        sys.exit(1)
+
+def open_dashboard():
+    if config_get('dashboard_open_browser') is False:
+        print(f"[INFO] dashboard is at http://localhost:{DASHBOARD_PORT}")
+        return
+    webbrowser.open(f'http://localhost:{DASHBOARD_PORT}')
 
 def reject_foreign_request(request):
     # Host check blocks DNS rebinding; requiring a custom header on POST forces a CORS
@@ -1538,7 +1562,7 @@ def downloadshit():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if not CONFIG_FILE.exists():
         with open(CONFIG_FILE, 'w') as f:
-            f.write('{\n}')
+            json.dump(apply_preconfig({}), f, indent=4)
         print(f"Creating {CONFIG_FILE.relative_to(PROJECT_ROOT)}")
 
     os_name = platform.system().lower()
@@ -2000,6 +2024,44 @@ renderStep();
 </script>
 </body></html>'''
 
+PRECONFIG_FILE = PROJECT_ROOT / "preconfig.json"
+
+def apply_preconfig(config_data):
+    # Seeds a brand-new config.json from preconfig.json, so first-run setup only asks for
+    # whatever preconfig leaves out. Values go through the same checks as the setup page
+    try:
+        with open(PRECONFIG_FILE, "r", encoding="utf-8") as f:
+            preconfig = json.load(f)
+    except FileNotFoundError:
+        return config_data
+    except json.JSONDecodeError as e:
+        print(f"[WARNING] preconfig.json isn't valid JSON, ignoring it ({e})")
+        return config_data
+    field_specs = {f[0]: f for f in SETUP_FIELDS}
+    for key, value in preconfig.items():
+        if key.startswith('_') or value is None:
+            continue
+        spec = field_specs.get(key)
+        if spec is None:
+            config_data[key] = value
+            continue
+        kind = spec[1]
+        # preconfig.json is tracked by git, so tokens stay out of it
+        if kind in ('token', 'token_optional') and value:
+            print(f"[WARNING] preconfig.json can't hold tokens, {key} will be asked during setup")
+            continue
+        if kind == 'idlist' and isinstance(value, list):
+            value = ', '.join(str(v) for v in value)
+        try:
+            ok, value, error = validate_setup_field(key, kind, value)
+        except (AttributeError, TypeError):
+            ok, error = False, "wrong type."
+        if ok:
+            config_data[key] = value
+        else:
+            print(f"[WARNING] preconfig.json {key}: {error} It will be asked during setup.")
+    return config_data
+
 def run_web_setup(config_data, groups):
     from flask import Flask, request, jsonify
     from werkzeug.serving import make_server
@@ -2051,12 +2113,12 @@ def run_web_setup(config_data, groups):
         done_event.set()
         return jsonify({"ok": True})
 
-    httpd = make_server('localhost', 8080, app)
+    httpd = make_server('localhost', DASHBOARD_PORT, app)
     server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     server_thread.start()
     print("[INFO] first-run setup required!")
     time.sleep(0.5)
-    webbrowser.open('http://localhost:8080')
+    open_dashboard()
     done_event.wait()
     httpd.shutdown()
     server_thread.join(timeout=5)
@@ -2074,6 +2136,9 @@ def config():
         run_web_setup(config_data, groups)
 
 downloadshit()
+DASHBOARD_PORT = load_dashboard_port()
+LOCAL_HOSTS = {f"localhost:{DASHBOARD_PORT}", f"127.0.0.1:{DASHBOARD_PORT}"}
+ensure_dashboard_port_free(DASHBOARD_PORT)
 install_cascadia_mono_font()
 try:
     if tokenvalid(config_get('token')):
