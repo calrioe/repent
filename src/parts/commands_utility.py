@@ -199,13 +199,8 @@ async def invislink(ctx, link2):
     await ctx.send(f"‏‏‎‎||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||||​||‎‎||‎||‎‎||‎‎||‎‎||‎‎||||||||||||||||||||||{link2}")
 
 @Repent.command(description=f"Cycles between custom statuses to disable it just run the command again. \nUsage: {config_get('prefix')}cyclestatus <status 1> <status 2>\n\nThis is also used as a two way toggle, to turn this off, do the command without any args.", help="utility")
-async def cyclestatus(ctx, status1=None, status2=None):    
-    with open('data/Settings/Configs/Settings.json', 'r') as file:
-        settings_data = json.load(file)
-    if 'cyclestatus' not in settings_data:
-        settings_data['cyclestatus'] = False
-        with open('data/Settings/Configs/Settings.json', 'w') as file:
-            json.dump(settings_data, file, indent=4)
+async def cyclestatus(ctx, status1=None, status2=None):
+    global CYCLE_STATUS_RUN
     if status1 is None or status2 is None:
         if setting_get('cyclestatus') is True:
             setting_edit("cyclestatus", False)
@@ -224,7 +219,8 @@ async def cyclestatus(ctx, status1=None, status2=None):
         body = "Cycle Status Starting."
         cmdname = "Cycle Status"
         await panelmaker(ctx, heading, body, cmdname)
-        threading.Thread(target=cycle_statuses_thread(status1, status2)).start()
+        CYCLE_STATUS_RUN += 1
+        threading.Thread(target=cycle_statuses_thread, args=(status1, status2, CYCLE_STATUS_RUN), daemon=True).start()
 
 @Repent.command(description=f"Searches UrbanDictionary for a word or phrase. \nUsage: {config_get('prefix')}urban <phrase/word>", help="utility")
 async def urban(ctx, *, word):    

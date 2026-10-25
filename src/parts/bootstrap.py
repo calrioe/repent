@@ -890,7 +890,7 @@ def apply_theming(text):
         '{webhooknotifs}': str(config_get('webhooknotifs')),
         '{afkmode}': str(config_get('afkmode')),
         '{afkmsg}': str(config_get('afkmsg')),
-        '{embedmode}': str(config_get('embedmode'))
+        '{embedmode}': str(config_get('embed_mode'))
     }
     for key, variable in variables.items():
         text = text.replace(key, variable)
@@ -931,18 +931,27 @@ def urlif(s):
     s = re.sub(r"\s+", '-', s)
     return s
 
-def cycle_statuses_thread(status1, status2):
-    while config_get('cyclestatus') is True:
+CYCLE_STATUS_RUN = 0
+
+def cycle_statuses_thread(status1, status2, run_id):
+    # Each cyclestatus start bumps CYCLE_STATUS_RUN, so an older loop exits instead of
+    # alternating alongside the new one
+    while setting_get('cyclestatus') is True and run_id == CYCLE_STATUS_RUN:
         try:
-            content = {"custom_status": {"text": status1}}
-            requesters.patch("https://ptb.discordapp.com/api/v9/users/@me/settings", headers={"authorization": config_get('token')}, json_data=content)
-            time.sleep(3)
-            con = {"custom_status": {"text": status2}}
-            requesters.patch("https://ptb.discordapp.com/api/v9/users/@me/settings", headers={"authorization": config_get('token')}, json_data=con)
-            time.sleep(3)
+            for status in (status1, status2):
+                content = {"custom_status": {"text": status}}
+                # quiet: the failure printout includes the request headers, which hold the token
+                r = requesters.patch("https://ptb.discordapp.com/api/v9/users/@me/settings", headers={"authorization": config_get('token')}, json_data=content, quiet=True)
+                if 400 <= r.status_code < 500 and r.status_code != 429:
+                    print(f"[ERROR] cyclestatus stopped, Discord rejected the status change (HTTP {r.status_code})")
+                    if run_id == CYCLE_STATUS_RUN:
+                        setting_edit("cyclestatus", False)
+                    return
+                time.sleep(3)
         except Exception as e:
             print(f"{Fore.LIGHTRED_EX}[ERROR]: {Fore.WHITE}Something went wrong: {e}")
             asyncio.run(send_webhook("Cycle Statuses Error", f"An error occurred while cycling statuses: {str(e)}", config_get('error_webhook_url')))
+            time.sleep(3)
     
 def clear_console():
     api.cls()
