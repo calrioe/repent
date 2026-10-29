@@ -350,7 +350,6 @@ resize_terminal()
 def create_folder(folder_path):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-       # print(f"Creating {folder_path}")
 
 def download_file(url, path):
     if os.path.exists(path):
@@ -358,12 +357,10 @@ def download_file(url, path):
     if url == '{}':
         with open(path, 'w') as f:
             f.write('{\n}')
-      #  print(f"Creating {path}")
     else:
         response = requesters.get(url)
         with open(path, 'wb') as f:
             f.write(response.content)
-       # print(f"Creating {path}")
 
 def open_config_read(file_path=CONFIG_FILE):
     with open(file_path, "r", encoding="utf-8") as json_file:
@@ -399,7 +396,20 @@ def filesafe(filename):
 
 DEFAULT_DASHBOARD_PORT = 6767
 
+# RAILWAY FIX: detect hosted platforms that inject PORT (Railway, Fly, Render, Heroku).
+def _is_hosted_platform():
+    return bool(os.environ.get("PORT"))
+
 def load_dashboard_port():
+    # RAILWAY FIX: honor the platform-injected PORT first, fall back to config for local use.
+    env_port = os.environ.get("PORT")
+    if env_port:
+        try:
+            env_port_int = int(env_port)
+            if 1 <= env_port_int <= 65535:
+                return env_port_int
+        except (TypeError, ValueError):
+            print(f"[WARNING] PORT env var is invalid ({env_port!r}), falling back to config")
     try:
         port = int(config_get('dashboard_port') or DEFAULT_DASHBOARD_PORT)
     except (TypeError, ValueError):
@@ -409,7 +419,40 @@ def load_dashboard_port():
         return DEFAULT_DASHBOARD_PORT
     return port
 
+def _allowed_dashboard_hosts():
+    # RAILWAY FIX: build the allow-list from localhost + the platform's public/private domains.
+    # Anything not in here gets a 403 from reject_foreign_request(), which is what was
+    # blocking setup + the dashboard on Railway.
+    hosts = {
+        "localhost",
+        "127.0.0.1",
+        f"localhost:{DASHBOARD_PORT}",
+        f"127.0.0.1:{DASHBOARD_PORT}",
+        f"0.0.0.0:{DASHBOARD_PORT}",
+    }
+    for env_var in ("RAILWAY_PUBLIC_DOMAIN", "RAILWAY_PRIVATE_DOMAIN", "RAILWAY_STATIC_URL"):
+        value = os.environ.get(env_var)
+        if not value:
+            continue
+        value = value.replace("https://", "").replace("http://", "").strip("/").lower()
+        if not value:
+            continue
+        hosts.add(value)
+        hosts.add(f"{value}:443")
+        hosts.add(f"{value}:80")
+        hosts.add(f"{value}:{DASHBOARD_PORT}")
+    for item in os.environ.get("REPENT_ALLOWED_HOSTS", "").split(","):
+        item = item.strip().lower().replace("https://", "").replace("http://", "").strip("/")
+        if not item:
+            continue
+        hosts.add(item)
+        hosts.add(f"{item}:{DASHBOARD_PORT}")
+    return hosts
+
 def ensure_dashboard_port_free(port):
+    # RAILWAY FIX: hosted platforms assign PORT; nothing else should be listening on it.
+    if _is_hosted_platform():
+        return
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         in_use = s.connect_ex(('127.0.0.1', port)) == 0
@@ -418,6 +461,10 @@ def ensure_dashboard_port_free(port):
         sys.exit(1)
 
 def open_dashboard():
+    # RAILWAY FIX: no browser in a container, and the URL is the platform's public domain.
+    if _is_hosted_platform():
+        print(f"[INFO] dashboard is served on port {DASHBOARD_PORT} (use your Railway public URL)")
+        return
     if config_get('dashboard_open_browser') is False:
         print(f"[INFO] dashboard is at http://localhost:{DASHBOARD_PORT}")
         return
@@ -425,8 +472,17 @@ def open_dashboard():
 
 def reject_foreign_request(request):
     # Host check blocks DNS rebinding; requiring a custom header on POST forces a CORS
-    # preflight that this server never approves, so other websites can't call the API
-    if request.host not in LOCAL_HOSTS:
+    # preflight that this server never approves, so other websites can't call the API.
+    # RAILWAY FIX: also inspect X-Forwarded-Host, which the Railway proxy sets.
+    host = (request.host or "").lower()
+    candidates = {host}
+    forwarded = (request.headers.get("X-Forwarded-Host") or "").lower()
+    if forwarded:
+        candidates.add(forwarded)
+        fport = request.headers.get("X-Forwarded-Port")
+        if fport:
+            candidates.add(f"{forwarded}:{fport}")
+    if not (candidates & LOCAL_HOSTS):
         return "Forbidden", 403
     if request.method == "POST" and request.headers.get("X-Repent-Client") != "1":
         return "Forbidden", 403
@@ -934,13 +990,10 @@ def urlif(s):
 CYCLE_STATUS_RUN = 0
 
 def cycle_statuses_thread(status1, status2, run_id):
-    # Each cyclestatus start bumps CYCLE_STATUS_RUN, so an older loop exits instead of
-    # alternating alongside the new one
     while setting_get('cyclestatus') is True and run_id == CYCLE_STATUS_RUN:
         try:
             for status in (status1, status2):
                 content = {"custom_status": {"text": status}}
-                # quiet: the failure printout includes the request headers, which hold the token
                 r = requesters.patch("https://ptb.discordapp.com/api/v9/users/@me/settings", headers={"authorization": config_get('token')}, json_data=content, quiet=True)
                 if 400 <= r.status_code < 500 and r.status_code != 429:
                     print(f"[ERROR] cyclestatus stopped, Discord rejected the status change (HTTP {r.status_code})")
@@ -2036,8 +2089,6 @@ renderStep();
 PRECONFIG_FILE = PROJECT_ROOT / "preconfig.json"
 
 def apply_preconfig(config_data):
-    # Seeds a brand-new config.json from preconfig.json, so first-run setup only asks for
-    # whatever preconfig leaves out. Values go through the same checks as the setup page
     try:
         with open(PRECONFIG_FILE, "r", encoding="utf-8") as f:
             preconfig = json.load(f)
@@ -2055,7 +2106,6 @@ def apply_preconfig(config_data):
             config_data[key] = value
             continue
         kind = spec[1]
-        # preconfig.json is tracked by git, so tokens stay out of it
         if kind in ('token', 'token_optional') and value:
             print(f"[WARNING] preconfig.json can't hold tokens, {key} will be asked during setup")
             continue
@@ -2122,7 +2172,8 @@ def run_web_setup(config_data, groups):
         done_event.set()
         return jsonify({"ok": True})
 
-    httpd = make_server('localhost', DASHBOARD_PORT, app)
+    # RAILWAY FIX: bind 0.0.0.0 so the platform proxy can reach the setup page.
+    httpd = make_server('0.0.0.0', DASHBOARD_PORT, app)
     server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     server_thread.start()
     print("[INFO] first-run setup required!")
@@ -2146,7 +2197,8 @@ def config():
 
 downloadshit()
 DASHBOARD_PORT = load_dashboard_port()
-LOCAL_HOSTS = {f"localhost:{DASHBOARD_PORT}", f"127.0.0.1:{DASHBOARD_PORT}"}
+# RAILWAY FIX: allow-list driven by localhost + platform domains + REPENT_ALLOWED_HOSTS.
+LOCAL_HOSTS = _allowed_dashboard_hosts()
 ensure_dashboard_port_free(DASHBOARD_PORT)
 install_cascadia_mono_font()
 try:
